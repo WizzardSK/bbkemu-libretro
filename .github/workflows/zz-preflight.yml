@@ -1,0 +1,31 @@
+name: buildbot preflight (32-bit)
+on: [push, workflow_dispatch]
+
+jobs:
+  linux-i686:
+    runs-on: ubuntu-22.04
+    container: rust:latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          apt-get update -qy && apt-get install -yq gcc-multilib
+          rustup target add i686-unknown-linux-gnu
+          cargo build --release --target i686-unknown-linux-gnu
+      - run: |
+          ls -l target/i686-unknown-linux-gnu/release/libbbkemu.so
+          file target/i686-unknown-linux-gnu/release/libbbkemu.so
+          nm -D --defined-only target/i686-unknown-linux-gnu/release/libbbkemu.so | grep " T retro_run"
+
+  windows-i686:
+    runs-on: ubuntu-22.04
+    container: rust:latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          apt-get update -qy && apt-get install -yq gcc-mingw-w64-i686
+          rustup target add i686-pc-windows-gnu
+          CARGO_TARGET_I686_PC_WINDOWS_GNU_LINKER=i686-w64-mingw32-gcc \
+            cargo build --release --target i686-pc-windows-gnu
+      - run: |
+          ls -l target/i686-pc-windows-gnu/release/bbkemu.dll
+          file target/i686-pc-windows-gnu/release/bbkemu.dll
