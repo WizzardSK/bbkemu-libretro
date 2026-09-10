@@ -1,0 +1,39 @@
+name: i686 windows-gnu probe
+
+on:
+  push:
+    branches: [ci-32bit-fix]
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reproduce the buildbot's toolchain (bionic + its mingw) and try three routes
+        run: |
+          docker run --rm -v "$PWD":/src -w /src ubuntu:bionic bash -c '
+            set -x
+            apt-get update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get install -yqq curl ca-certificates build-essential \
+              gcc-mingw-w64-i686 g++-mingw-w64-i686 git
+            echo "===== exception model ====="
+            i686-w64-mingw32-gcc -v 2>&1 | tr " " "\n" | grep -iE "sjlj|dwarf|exception" || true
+            i686-w64-mingw32-gcc -dumpspecs 2>/dev/null | head -1 || true
+            nm -g /usr/lib/gcc/i686-w64-mingw32/*/libgcc_eh.a 2>/dev/null | grep -c "_Unwind_Resume" || true
+            nm -g /usr/lib/gcc/i686-w64-mingw32/*/libgcc_eh.a 2>/dev/null | grep -c "_Unwind_SjLj_Resume" || true
+            echo "===== rustup ====="
+            curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly --profile minimal
+            . $HOME/.cargo/env
+            rustup component add rust-src
+            rustup target add i686-pc-windows-gnu
+            export CARGO_TARGET_I686_PC_WINDOWS_GNU_LINKER=i686-w64-mingw32-gcc
+            echo "===== route A: plain cargo build (expected to fail) ====="
+            cargo build --release --target i686-pc-windows-gnu 2>&1 | tail -20 || echo "ROUTE_A_FAILED"
+            echo "===== route B: build-std with panic_immediate_abort ====="
+            cargo build --release --target i686-pc-windows-gnu \
+              -Z build-std=std,panic_abort \
+              -Z build-std-features=panic_immediate_abort 2>&1 | tail -20 && echo ROUTE_B_OK || echo ROUTE_B_FAILED
+            ls -la target/i686-pc-windows-gnu/release/*.dll || true
+            file target/i686-pc-windows-gnu/release/*.dll || true
+          '
