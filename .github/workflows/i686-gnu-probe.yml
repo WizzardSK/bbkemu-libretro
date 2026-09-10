@@ -26,7 +26,7 @@ jobs:
               -Z build-std=std,panic_abort
             DLL=target/i686-pc-windows-gnu/release/bbkemu.dll
             ls -la $DLL
-            file $DLL
+            i686-w64-mingw32-objdump -f $DLL | head -4
             echo "--- exported retro_ symbols ---"
             i686-w64-mingw32-objdump -p $DLL | grep -oE "retro_[a-z_]+" | sort -u
             echo "--- unwind references (expect none) ---"
