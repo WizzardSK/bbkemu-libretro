@@ -33,11 +33,15 @@ jobs:
             cargo build --release --target i686-pc-windows-gnu > /tmp/a.log 2>&1
             echo "A_STATUS=$?"; tail -5 /tmp/a.log
             find target -name "*.dll" | head
-            echo "===== route B: build-std + panic_immediate_abort ====="
-            cargo build --release --target i686-pc-windows-gnu \
-              -Z build-std=std,panic_abort \
-              -Z build-std-features=panic_immediate_abort > /tmp/b.log 2>&1
+            echo "===== route B: build-std + -Cpanic=abort (stable flag spelling) ====="
+            RUSTFLAGS="-Cpanic=abort" cargo build --release --target i686-pc-windows-gnu \
+              -Z build-std=std,panic_abort > /tmp/b.log 2>&1
             echo "B_STATUS=$?"; tail -25 /tmp/b.log
+            find target -name "*.dll" | head
+            echo "===== route C: build-std + -Cpanic=immediate-abort ====="
+            RUSTFLAGS="-Zunstable-options -Cpanic=immediate-abort" cargo build --release --target i686-pc-windows-gnu \
+              -Z build-std=std,panic_abort > /tmp/c.log 2>&1
+            echo "C_STATUS=$?"; tail -25 /tmp/c.log
             find target -name "*.dll" | head
             for d in $(find target -name "*.dll"); do file "$d"; i686-w64-mingw32-nm -g "$d" 2>/dev/null | grep -c retro_run; done
           '
