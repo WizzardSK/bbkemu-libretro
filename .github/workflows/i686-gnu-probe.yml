@@ -10,38 +10,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Reproduce the buildbot's toolchain (bionic + its mingw)
+      - name: Verify the build-std route on the buildbot's toolchain
         run: |
           docker run --rm -v "$PWD":/src -w /src ubuntu:bionic bash -c '
+            set -e
             apt-get update -qq
             DEBIAN_FRONTEND=noninteractive apt-get install -yqq curl ca-certificates build-essential \
               gcc-mingw-w64-i686 g++-mingw-w64-i686 git >/dev/null
-            echo "===== gcc -v ====="
-            i686-w64-mingw32-gcc -v 2>&1
-            echo "===== libgcc_eh unwind symbols ====="
-            for f in $(find / -name libgcc_eh.a 2>/dev/null | grep i686-w64); do
-              echo "-- $f"
-              nm -g "$f" 2>/dev/null | grep -E "T _Unwind_(Resume|SjLj_Resume)" | sort -u
-            done
-            echo "===== rustup ====="
             curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly --profile minimal >/dev/null
             . $HOME/.cargo/env
             rustup component add rust-src
             rustup target add i686-pc-windows-gnu
             export CARGO_TARGET_I686_PC_WINDOWS_GNU_LINKER=i686-w64-mingw32-gcc
-            echo "===== route A: plain cargo build ====="
-            cargo build --release --target i686-pc-windows-gnu > /tmp/a.log 2>&1
-            echo "A_STATUS=$?"; tail -5 /tmp/a.log
-            find target -name "*.dll" | head
-            echo "===== route B: build-std + -Cpanic=abort (stable flag spelling) ====="
             RUSTFLAGS="-Cpanic=abort" cargo build --release --target i686-pc-windows-gnu \
-              -Z build-std=std,panic_abort > /tmp/b.log 2>&1
-            echo "B_STATUS=$?"; tail -25 /tmp/b.log
-            find target -name "*.dll" | head
-            echo "===== route C: build-std + -Cpanic=immediate-abort ====="
-            RUSTFLAGS="-Zunstable-options -Cpanic=immediate-abort" cargo build --release --target i686-pc-windows-gnu \
-              -Z build-std=std,panic_abort > /tmp/c.log 2>&1
-            echo "C_STATUS=$?"; tail -25 /tmp/c.log
-            find target -name "*.dll" | head
-            for d in $(find target -name "*.dll"); do file "$d"; i686-w64-mingw32-nm -g "$d" 2>/dev/null | grep -c retro_run; done
+              -Z build-std=std,panic_abort
+            DLL=target/i686-pc-windows-gnu/release/bbkemu.dll
+            ls -la $DLL
+            file $DLL
+            echo "--- exported retro_ symbols ---"
+            i686-w64-mingw32-objdump -p $DLL | grep -oE "retro_[a-z_]+" | sort -u
+            echo "--- unwind references (expect none) ---"
+            i686-w64-mingw32-objdump -p $DLL | grep -c "_Unwind" || true
           '
